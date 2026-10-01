@@ -1,26 +1,202 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: the toggle writes .dark / .light on <html>; with no stored
+   choice, a pre-paint script mirrors prefers-color-scheme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Learn Prep tokens — black, white and one olive. Semantic names so components never
+   hard-code a hex; dark mode only swaps these values. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #fafaf8;
+  --card: #ffffff;
+  --ink: #101010;
+  --graphite: #4a4a46;
+  --muted: #6b6b63;       /* 4.8:1 on paper */
+  --rule: #e4e4de;
+  --line: #d8d8d2;
+  --soft: #f2f2ee;
+  --skeleton: #edede8;
+  --olive: #5c6f35;       /* 5.6:1 with white text, in both themes */
+  --olive-deep: #44522a;
+  --olive-line: #cbd5b0;
+  --olive-tint: #eef1e3;
+  --olive-ink: #44522a;   /* olive used AS text */
+  --on-olive: #ffffff;
+  --on-ink: #ffffff;
+  color-scheme: light;
+}
+
+.dark {
+  --paper: #0f100d;
+  --card: #171814;
+  --ink: #f1f1ec;
+  --graphite: #bdbdb3;
+  --muted: #93938a;
+  --rule: #2a2b25;
+  --line: #3a3b34;
+  --soft: #1f201b;
+  --skeleton: #25261f;
+  --olive: #5c6f35;
+  --olive-deep: #4a5a2b;
+  --olive-line: #3e4a2a;
+  --olive-tint: #1b2114;
+  --olive-ink: #b7c98c;
+  --on-olive: #ffffff;
+  --on-ink: #0f100d;
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-graphite: var(--graphite);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-line: var(--line);
+  --color-soft: var(--soft);
+  --color-skeleton: var(--skeleton);
+  --color-olive: var(--olive);
+  --color-olive-deep: var(--olive-deep);
+  --color-olive-line: var(--olive-line);
+  --color-olive-tint: var(--olive-tint);
+  --color-olive-ink: var(--olive-ink);
+  --color-on-olive: var(--on-olive);
+  --color-on-ink: var(--on-ink);
+  --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Micro caps label — the one repeated type style that earns a utility. */
+@utility label-caps {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+@utility tap {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@utility no-bar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Pressed-state micro-motion shared by every control. */
+@utility press {
+  transition:
+    transform 0.13s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease;
+  &:active:not(:disabled) {
+    transform: scale(0.972);
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--olive);
+  outline-offset: 2px;
+}
+
+/* 3D flip for flashcards. */
+.flip {
+  perspective: 1800px;
+}
+.flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+.flip[data-flipped="true"] .flip-inner {
+  transform: rotateY(180deg);
+}
+.face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.face-back {
+  transform: rotateY(180deg);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pop {
+  animation: pop-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+.nudge {
+  animation: nudge 0.3s ease;
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+.skeleton {
+  background: var(--skeleton);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

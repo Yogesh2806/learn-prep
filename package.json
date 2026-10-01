@@ -6,12 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "snapshot:words": "node scripts/snapshot-words.mjs",
+    "test": "tsx tests/conjugate.test.ts && tsx tests/lessons.test.ts && tsx tests/confusions.test.ts",
+    "pick:senses": "node --env-file=.env.local scripts/pick-senses.mjs",
+    "bake": "node --env-file=.env.local --conditions=react-server --import tsx scripts/bake.mts"
   },
   "dependencies": {
+    "compromise": "^14.17.0",
     "next": "16.3.6",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "ts-fsrs": "^5.4.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -21,6 +28,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
