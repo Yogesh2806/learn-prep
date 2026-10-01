@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useEffectEvent, useRef, useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode } from "react";
+import { openSettings } from "@/lib/ai-settings";
+import { AiError } from "@/lib/engines/errors";
 import { describeError } from "@/lib/net";
 import { pronounce, speak } from "@/lib/speech";
 import { cx } from "@/lib/utils";
@@ -147,6 +149,7 @@ export const Icon = {
   offline: (p: { size?: number; className?: string }) => <I {...p} d={<path d="M2 2l20 20M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 3.5-2.3M19 12.9a10 10 0 0 0-6.5-2.8M1.4 9.3a15 15 0 0 1 4.6-2.9M22.6 9.3a15 15 0 0 0-10.4-3.2M12 20h.01" />} />,
   lock: (p: { size?: number; className?: string }) => <I {...p} d={<><rect x="5" y="11" width="14" height="10" rx="1" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>} />,
   spark: (p: { size?: number; className?: string }) => <I {...p} d={<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5" />} />,
+  gear: (p: { size?: number; className?: string }) => <I {...p} sw={1.8} d={<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></>} />,
   refresh: (p: { size?: number; className?: string }) => <I {...p} d={<><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 3v6h-6" /></>} />,
 };
 
@@ -189,6 +192,7 @@ export function Skeleton({ lines = 3, title = true, className }: { lines?: numbe
 export function ErrorPanel({ error, onRetry, compact }: { error: unknown; onRetry?: () => void; compact?: boolean }) {
   const { title, body } = describeError(error);
   const offline = error instanceof Error && "kind" in error && (error as { kind: string }).kind === "offline";
+  const needsSettings = error instanceof AiError && (error.kind === "setup" || error.kind === "key" || error.kind === "unsupported");
   return (
     <div role="alert" className={cx("pop flex flex-col gap-2.5 border border-rule border-l-[3px] border-l-ink bg-card", compact ? "p-3.5" : "p-5")}>
       <div className="flex items-center gap-2">
@@ -196,11 +200,18 @@ export function ErrorPanel({ error, onRetry, compact }: { error: unknown; onRetr
         <span className="text-[14px] font-medium">{title}</span>
       </div>
       <p className="font-serif text-[15px] leading-relaxed text-graphite">{body}</p>
-      {onRetry && (
-        <div>
-          <Btn variant="ink" size="sm" onClick={onRetry}>
-            Try again
-          </Btn>
+      {(onRetry || needsSettings) && (
+        <div className="flex flex-wrap gap-2">
+          {needsSettings && (
+            <Btn variant="ink" size="sm" onClick={openSettings}>
+              Open Settings
+            </Btn>
+          )}
+          {onRetry && (
+            <Btn variant={needsSettings ? "quiet" : "ink"} size="sm" onClick={onRetry}>
+              Try again
+            </Btn>
+          )}
         </div>
       )}
     </div>

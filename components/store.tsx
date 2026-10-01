@@ -7,16 +7,19 @@ import { addResult, addXp, loadChallenges, loadPerf, loadXp, saveChallenge, XP, 
 import { KEYS, readJSON, writeJSON } from "@/lib/storage";
 
 export type Subject = "design" | "english";
+/** Settings → "What to study": hide the subject you don't need. */
+export type Sections = Subject | "both";
 export type EnglishCat = "challenge" | "word" | "vocab" | "tenses" | "grammar" | "punct" | "writing" | "slang" | "doubt";
 export type UI = {
   subject: Subject;
+  sections?: Sections;
   designCat: string; // "All" or a DesignCategory
   designMode: "flashcards" | "quiz" | "recall";
   englishCat: EnglishCat;
   englishModes: Partial<Record<EnglishCat, string>>;
 };
 
-const DEFAULT_UI: UI = { subject: "design", designCat: "All", designMode: "flashcards", englishCat: "word", englishModes: {} };
+const DEFAULT_UI: UI = { subject: "design", sections: "both", designCat: "All", designMode: "flashcards", englishCat: "word", englishModes: {} };
 
 type Store = {
   ui: UI;

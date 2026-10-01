@@ -1,3 +1,4 @@
+import { AiError } from "./engines/errors";
 import { sleep } from "./utils";
 
 export type NetErrorKind = "offline" | "timeout" | "rate-limit" | "unavailable" | "not-found" | "bad-response" | "rejected";
@@ -64,6 +65,10 @@ export async function fetchJSON<T>(url: string, { timeoutMs = 15_000, backoff = 
 }
 
 export function describeError(e: unknown): { title: string; body: string } {
+  if (e instanceof AiError) {
+    const title = { setup: "AI isn't set up", key: "Check your Gemini key", quota: "Your key hit its limit", busy: "The AI is busy", blocked: "The AI declined that", invalid: "The AI's answer didn't check out", unsupported: "This device can't run that model" }[e.kind];
+    return { title, body: e.message };
+  }
   if (e instanceof NetError) {
     switch (e.kind) {
       case "offline":

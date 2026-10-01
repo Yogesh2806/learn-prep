@@ -1,11 +1,15 @@
-import "server-only";
-import type { AiIn, AiOut, AiTask, MCQ } from "../ai-types";
-import { TOPIC_LESSONS } from "../english-lessons";
-import { TENSE_BY_ID, TENSE_IDS, TENSE_LESSONS, isTenseId } from "../tense-meta";
+import type { AiIn, AiOut, AiTask, MCQ } from "./ai-types";
+import { TOPIC_LESSONS } from "./english-lessons";
+import { TENSE_BY_ID, TENSE_IDS, TENSE_LESSONS, isTenseId } from "./tense-meta";
+
+// Every AI task: how to validate its input, the prompt, the output schema and the check
+// its answer must pass. Shared by every engine — the learner's Gemini key, Chrome's
+// built-in model, the in-browser model and the bake script — so a weak model's bad
+// answer is rejected the same way a strong one's would be.
 
 // ---------------------------------------------------------------- schema helpers
 // Gemini's responseSchema is an OpenAPI subset (upper-case type names).
-type Schema = Record<string, unknown>;
+export type Schema = Record<string, unknown>;
 const str = (): Schema => ({ type: "STRING" });
 const int = (): Schema => ({ type: "INTEGER" });
 const bool = (): Schema => ({ type: "BOOLEAN" });
@@ -355,4 +359,34 @@ Output only JSON that matches the provided schema.`;
 
 export function isTask(x: unknown): x is AiTask {
   return typeof x === "string" && Object.prototype.hasOwnProperty.call(TASKS, x);
+}
+
+/** The key a pre-generated answer is stored under (lib/baked-ai.json), or null if the task is always live. */
+export function bakeKey(task: AiTask, input: unknown): string | null {
+  const i = input as Record<string, unknown>;
+  switch (task) {
+    case "word-teach":
+      return `word-teach:${String(i.word).toLowerCase()}`;
+    case "mnemonic":
+      return `mnemonic:${String(i.term).toLowerCase()}`;
+    case "design-extras":
+      return `design-extras:${String(i.term).toLowerCase()}`;
+    case "tense-explain":
+      return `tense-explain:${String(i.tense)}`;
+    default:
+      return null;
+  }
+}
+
+/** Gemini's OpenAPI-style schema → standard JSON Schema, for the on-device engines. */
+export function toJsonSchema(s: Schema): Schema {
+  const out: Schema = {};
+  for (const [k, v] of Object.entries(s)) {
+    if (k === "type") out.type = String(v).toLowerCase();
+    else if (k === "properties") out.properties = Object.fromEntries(Object.entries(v as Record<string, Schema>).map(([p, sub]) => [p, toJsonSchema(sub)]));
+    else if (k === "items") out.items = toJsonSchema(v as Schema);
+    else out[k] = v;
+  }
+  if (out.type === "object") out.additionalProperties = false;
+  return out;
 }

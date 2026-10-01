@@ -13,13 +13,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { PROMPT_VERSION, type AiTask } from "../lib/ai-types";
 import { DECK } from "../lib/design-data";
 import { TOPIC_LESSONS } from "../lib/english-lessons";
-import { bakeKey } from "../lib/server/baked";
-import { generate } from "../lib/server/gemini";
-import { SYSTEM_INSTRUCTION, TASKS } from "../lib/server/tasks";
+import { bakeKey, SYSTEM_INSTRUCTION, TASKS } from "../lib/ai-tasks";
+import { generate } from "../lib/engines/gemini";
 import { TENSE_IDS } from "../lib/tense-meta";
 
 type Snap = Record<string, { senses: { pos: string; definition: string }[]; primary?: string }>;
 
+// The owner's key, from .env.local — only this script uses it; the deployed app has none.
+const KEY = process.env.GEMINI_API_KEY ?? "";
+if (!KEY) throw new Error("Set GEMINI_API_KEY in .env.local to run the bake.");
 const FILE = new URL("../lib/baked-ai.json", import.meta.url);
 const BATCH = 8;
 const snapshot = JSON.parse(readFileSync(new URL("../lib/word-snapshot.json", import.meta.url), "utf8")) as Snap;
@@ -32,7 +34,7 @@ const save = () => writeFileSync(FILE, JSON.stringify(store));
 type Job = { task: AiTask; input: unknown; key: string };
 const jobs: Job[] = [];
 const add = (task: AiTask, raw: unknown) => {
-  const input = TASKS[task].parse(raw as never); // exactly what the route would see
+  const input = TASKS[task].parse(raw as never); // exactly what the app would ask
   const key = bakeKey(task, input)!;
   if (!(key in store.items) && !jobs.some((j) => j.key === key)) jobs.push({ task, input, key });
 };
@@ -73,6 +75,7 @@ async function runBatch(task: AiTask, batch: Job[]) {
 
   let got = 0;
   await generate({
+    key: KEY,
     system: SYSTEM_INSTRUCTION,
     prompt,
     schema,

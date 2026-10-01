@@ -14,7 +14,7 @@ import { Btn, ErrorPanel, Icon, Label, Source, SpeakBtn, Tag, useSessionState } 
 // If the AI is down you still get the errors and a checker-corrected version.
 
 type Grade = AiOut<"writing-grade">;
-type Result = { text: string; matches: LTMatch[]; grade: Grade | null; aiError?: unknown; checkError?: unknown };
+type Result = { text: string; matches: LTMatch[]; grade: Grade | null; via?: string; aiError?: unknown; checkError?: unknown };
 
 const words = (s: string) => (s.trim() ? s.trim().split(/\s+/).length : 0);
 
@@ -54,7 +54,7 @@ export default function WritingArena({ mode }: { mode: "challenge" | "free" }) {
         issues: matches.slice(0, 15).map((m) => ({ text: m.text || "(missing)", suggestion: m.replacements[0] ?? "—", rule: m.message })),
       });
       const g = r.value;
-      setResult({ text, matches, grade: g, checkError });
+      setResult({ text, matches, grade: g, via: r.via, checkError });
       setProgress((p) => saveScore(p, isChallenge ? challenge.id : `free-${promptIdx}`, g.score));
       record("writing", g.score >= 70, 0);
       award(Math.round(g.score / 5)); // up to 20 XP
@@ -209,7 +209,7 @@ function Feedback({ result, grading, onRetry }: { result: Result; grading: boole
 
       <Source>
         Errors · LanguageTool{result.matches.some((m) => m.rule.startsWith("LOCAL_")) ? " + on-device check" : ""}
-        {result.checkError ? " (unreachable)" : ""} · Score, notes &amp; rewrite · {g ? "AI" : grading ? "AI (working…)" : "AI unavailable right now"}
+        {result.checkError ? " (unreachable)" : ""} · Score, notes &amp; rewrite · {g ? `AI · ${result.via}${result.via && !result.via.startsWith("Gemini") ? " (smaller model — scores are a rough guide)" : ""}` : grading ? "AI (working…)" : "AI unavailable right now"}
       </Source>
     </div>
   );

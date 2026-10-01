@@ -3,8 +3,8 @@ import type { TenseId } from "./tense-meta";
 /** Bump after changing any prompt: it keys both the server and the on-device caches. */
 export const PROMPT_VERSION = 2;
 
-// The contract between the client and /api/llm. Every task's output is validated on the
-// server before it leaves, so the UI can trust these shapes.
+// The contract between the UI and the AI layer (lib/ai.ts). Every engine's output is
+// validated by the task's check in lib/ai-tasks.ts before the UI sees it.
 
 export type Sense = { pos: string; definition: string; example?: string };
 export type MCQ = { question: string; options: string[]; answer: number; why: string };
@@ -44,5 +44,3 @@ export type AiTasks = {
 export type AiTask = keyof AiTasks;
 export type AiIn<T extends AiTask> = AiTasks[T]["in"];
 export type AiOut<T extends AiTask> = AiTasks[T]["out"];
-
-export type AiResponse<T extends AiTask> = { data: AiOut<T>; model: string; cached: boolean };

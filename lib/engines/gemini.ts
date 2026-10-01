@@ -1,19 +1,17 @@
-import "server-only";
+import { AiError } from "./errors";
 
-// One server-side door to the model. The key never leaves the server; every call asks
-// for schema-constrained JSON. On the free tier any single model is unreliable (measured:
+// Gemini, called with the learner's own key. It runs in the browser — the request goes
+// straight to Google, so Learn Prep's server never sees the key — and in Node for the
+// bake script. Every call asks for schema-constrained JSON. On the free tier any single model is unreliable (measured:
 // 503 "high demand", 429 daily quota, 2–8s answers), so this layer:
 //   • remembers each model's health and tries healthy ones first,
 //   • hedges — if the first model hasn't answered in a few seconds, a second races it,
 //   • caps concurrent calls, because bursts of 10 were measured to all stall.
 
-const list = (v: string | undefined, fallback: string[]) =>
-  v ? v.split(",").map((s) => s.trim()).filter(Boolean) : fallback;
-
 const CHAINS = {
   // Lite models first: their free-tier daily quotas are far larger than Flash's.
-  fast: list(process.env.GEMINI_MODELS_FAST, ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash"]),
-  quality: list(process.env.GEMINI_MODELS_QUALITY, ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]),
+  fast: ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash"],
+  quality: ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"],
 };
 
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -24,17 +22,8 @@ const PER_MODEL_MS = { fast: 10_000, quality: 20_000 } as const;
 const CHAIN_BUDGET_MS = { fast: 18_000, quality: 35_000 } as const;
 const MAX_IN_FLIGHT = 4;
 
-export class ModelError extends Error {
-  constructor(
-    message: string,
-    public retryable: boolean,
-    public status = 502,
-  ) {
-    super(message);
-  }
-}
-
-type Args = {
+export type Args = {
+  key: string;
   system: string;
   prompt: string;
   schema: Record<string, unknown>;
@@ -101,8 +90,8 @@ async function slot<T>(fn: () => Promise<T>): Promise<T> {
 
 // ---------------------------------------------------------------- one model
 async function tryModel(model: string, args: Args, timeoutMs: number, stop: AbortSignal): Promise<{ data: unknown; model: string }> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new ModelError("The AI key isn't configured on the server.", false, 500);
+  const key = args.key;
+  if (!key) throw new AiError("setup", "Add your Gemini key in Settings.");
   const started = Date.now();
   const signal = AbortSignal.any([stop, AbortSignal.timeout(timeoutMs)]);
 
@@ -126,14 +115,14 @@ async function tryModel(model: string, args: Args, timeoutMs: number, stop: Abor
       const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
       console.warn(`[gemini] ${model} ${timedOut ? "timed out" : "unreachable"}`);
       note(model, { ok: false, cool: COOL.timeout });
-      throw new ModelError(timedOut ? "The AI took too long." : "Couldn't reach the AI service.", true, timedOut ? 504 : 503);
+      throw new AiError("busy", timedOut ? "Gemini took too long." : "Couldn't reach Gemini.");
     }
 
     if (res.ok) {
       const body = await res.json().catch(() => null);
       const cand = body?.candidates?.[0];
       if (cand?.finishReason === "SAFETY" || body?.promptFeedback?.blockReason) {
-        throw new ModelError("That request was blocked by the AI's safety filter.", false, 422);
+        throw new AiError("blocked", "That request was blocked by Gemini's safety filter.");
       }
       const text: string = (cand?.content?.parts ?? [])
         .filter((p: { thought?: boolean; text?: string }) => !p.thought && typeof p.text === "string")
@@ -148,28 +137,45 @@ async function tryModel(model: string, args: Args, timeoutMs: number, stop: Abor
         /* unparseable — fall through */
       }
       console.warn(`[gemini] ${model} answer rejected by validator`);
-      throw new ModelError("The AI's answer didn't pass our checks.", true, 502);
+      throw new AiError("invalid", "The AI's answer didn't pass our checks.");
     }
 
-    if (res.status === 400) {
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
       const detail = await res.text().catch(() => "");
-      if (/think/i.test(detail) && level < THINKING.length - 1) continue; // step down a thinking level
-      throw new ModelError("The AI rejected the request.", false, 400);
-    }
-    if (res.status === 401 || res.status === 403) {
-      throw new ModelError("The AI key was rejected. Check GEMINI_API_KEY.", false, 500);
+      if (res.status === 400 && /think/i.test(detail) && level < THINKING.length - 1) continue; // step down a thinking level
+      throw keyProblem(detail) ?? new AiError("invalid", "Gemini rejected the request.", false);
     }
     // 404 = model not available to this key; 429 = quota; 5xx = overloaded.
     const cool = res.status === 404 ? COOL.missing : res.status === 429 ? quotaCool(await res.text().catch(() => "")) : COOL.overloaded;
     console.warn(`[gemini] ${model} → ${res.status}${res.status === 429 ? ` (resting ${Math.round(cool / 60_000)} min)` : ""}`);
     note(model, { ok: false, cool });
-    throw new ModelError(
-      res.status === 429 ? "Free-tier rate limit reached — try again in a minute." : "The AI service is busy right now.",
-      true,
-      res.status === 429 ? 429 : 503,
-    );
+    throw res.status === 429
+      ? new AiError("quota", "Your key hit Gemini's free-tier limit — try again in a minute.")
+      : new AiError("busy", "Gemini is busy right now.");
   }
-  throw new ModelError("The AI rejected the request.", false, 400);
+  throw new AiError("invalid", "Gemini rejected the request.", false);
+}
+
+/** Turns Google's key errors into something the learner can act on in Settings. */
+function keyProblem(detail: string): AiError | null {
+  if (/API_KEY_INVALID|API key not valid|API_KEY_EXPIRED/i.test(detail)) return new AiError("key", "Your Gemini key wasn't accepted. Check it in Settings.");
+  if (/REFERRER|referer/i.test(detail)) return new AiError("key", "Your Gemini key is restricted to other websites. Add this site to its allowed websites in Google AI Studio.");
+  if (/PERMISSION_DENIED|SERVICE_DISABLED|API_KEY_SERVICE_BLOCKED/i.test(detail)) return new AiError("key", "Your Gemini key can't use the Gemini API. Create a key in Google AI Studio.");
+  return null;
+}
+
+/** Settings → "Save & test": one tiny call that only checks the key works. */
+export async function testKey(key: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${ENDPOINT}?pageSize=1`, { headers: { "x-goog-api-key": key }, signal: AbortSignal.timeout(10_000), cache: "no-store" });
+  } catch {
+    throw new AiError("busy", "Couldn't reach Google to test the key. Check your connection.");
+  }
+  if (res.ok) return;
+  const detail = await res.text().catch(() => "");
+  if (/API_KEY_INVALID|API key not valid/i.test(detail)) throw new AiError("key", "Google didn't accept that key. Copy it again from Google AI Studio.");
+  throw keyProblem(detail) ?? (res.status === 429 ? new AiError("quota", "The key works but is rate-limited right now.") : new AiError("key", `Google answered ${res.status}. Check the key.`));
 }
 
 // ---------------------------------------------------------------- the chain, hedged
@@ -183,7 +189,7 @@ export function generate(args: Args): Promise<{ data: unknown; model: string }> 
     let next = 0;
     let running = 0;
     let done = false;
-    let lastError = new ModelError("The AI service didn't answer.", true, 503);
+    let lastError = new AiError("busy", "Gemini didn't answer.");
 
     const finish = (fn: () => void) => {
       if (done) return;
@@ -214,8 +220,8 @@ export function generate(args: Args): Promise<{ data: unknown; model: string }> 
           clearTimeout(hedge);
           running--;
           if (done) return;
-          if (e instanceof ModelError && !e.retryable) return finish(() => reject(e));
-          if (e instanceof ModelError) lastError = e;
+          if (e instanceof AiError && !e.retryable) return finish(() => reject(e));
+          if (e instanceof AiError) lastError = e;
           launch();
         },
       );
@@ -224,7 +230,7 @@ export function generate(args: Args): Promise<{ data: unknown; model: string }> 
   });
 }
 
-/** For the health check route / debugging: what the server currently believes. */
+/** For debugging: what this tab currently believes about each model. */
 export function modelHealth() {
   const now = Date.now();
   return Object.fromEntries([...health].map(([m, h]) => [m, { avgMs: h.ms, coolingFor: Math.max(0, Math.round((h.coolUntil - now) / 1000)) }]));

@@ -57,5 +57,6 @@ export const KEYS = {
   challenges: "lp.challenges.v1",
   slang: "lp.slang.v1",
   writing: "lp.writing.v1",
+  ai: "lp.ai.v1", // the learner's AI engine choice and, if they added one, their Gemini key
   legacy: "designprep.v1", // the single-file app's progress, migrated once
 } as const;

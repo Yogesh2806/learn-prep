@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ai } from "@/lib/ai";
+import { openSettings } from "@/lib/ai-settings";
+import { AiError } from "@/lib/engines/errors";
 import { confusionChecks, mergeMatches } from "@/lib/confusions";
 import { applyFixes, checkText, highlight, type LTMatch } from "@/lib/languagetool";
 import { cx } from "@/lib/utils";
@@ -13,8 +15,8 @@ import { ErrorPanel, Icon, Label, Source, SpeakBtn } from "../ui";
 // the teaching layer. The session history lives in sessionStorage only.
 
 type Turn =
-  | { id: number; kind: "sentence"; text: string; status: "loading" | "done" | "error"; matches?: LTMatch[]; notes?: string[]; tip?: string; corrected?: string; error?: unknown; explainFailed?: boolean }
-  | { id: number; kind: "question"; text: string; status: "loading" | "done" | "error"; answer?: string; examples?: string[]; onTopic?: boolean; error?: unknown };
+  | { id: number; kind: "sentence"; text: string; status: "loading" | "done" | "error"; matches?: LTMatch[]; notes?: string[]; tip?: string; corrected?: string; error?: unknown; explainFailed?: boolean; noEngine?: boolean; via?: string }
+  | { id: number; kind: "question"; text: string; status: "loading" | "done" | "error"; answer?: string; examples?: string[]; onTopic?: boolean; error?: unknown; via?: string };
 
 const QUESTION_START = /^(what|why|how|when|where|which|who|whom|whose|is|are|am|can|could|should|would|do|does|did|will|shall|may|might|must|difference|explain|meaning|define)\b/i;
 export const looksLikeQuestion = (t: string) => t.trim().endsWith("?") && QUESTION_START.test(t.trim()) || /^(what|why|how|explain|difference|define|meaning)\b/i.test(t.trim());
@@ -55,7 +57,7 @@ export default function DoubtSolver() {
       const history = turns.filter((x): x is Extract<Turn, { kind: "question" }> => x.kind === "question" && x.status === "done" && !!x.answer).slice(-3).map((x) => ({ q: x.text, a: x.answer! }));
       try {
         const r = await ai("doubt-answer", { question: t.text, history }, { cacheKey: `${t.text}::${history.map((h) => h.q).join("|")}` });
-        patch(t.id, { status: "done", ...r.value });
+        patch(t.id, { status: "done", ...r.value, via: r.via });
       } catch (e) {
         patch(t.id, { status: "error", error: e });
       }
@@ -76,9 +78,9 @@ export default function DoubtSolver() {
     patch(t.id, { matches, corrected }); // show the checker's findings immediately…
     try {
       const r = await ai("explain-corrections", { sentence: t.text, issues: matches.map((m) => ({ text: m.text || "(missing)", suggestion: m.replacements[0] ?? "—", rule: m.message })) });
-      patch(t.id, { status: "done", notes: r.value.notes, tip: r.value.tip }); // …then the plain-English "why"
-    } catch {
-      patch(t.id, { status: "done", explainFailed: true });
+      patch(t.id, { status: "done", notes: r.value.notes, tip: r.value.tip, via: r.via }); // …then the plain-English "why"
+    } catch (e) {
+      patch(t.id, { status: "done", explainFailed: true, noEngine: e instanceof AiError && e.kind === "setup" });
     }
   }
 
@@ -179,7 +181,7 @@ function TurnView({ turn, onRetry, onAskWhy }: { turn: Turn; onRetry: () => void
             ))}
           </div>
         )}
-        <Source>Answer written by AI</Source>
+        <Source>Answer written by AI{turn.via ? ` · ${turn.via}` : ""}</Source>
       </div>
     );
   }
@@ -231,7 +233,15 @@ function TurnView({ turn, onRetry, onAskWhy }: { turn: Turn; onRetry: () => void
         </div>
       )}
       {turn.tip && <p className="text-[12.5px] text-graphite"><span className="font-medium text-ink">Remember:</span> {turn.tip}</p>}
-      <Source>Errors · LanguageTool{turn.matches.some((m) => m.rule.startsWith("LOCAL_")) ? " + an on-device their/they're check" : ""}{turn.explainFailed ? " (plain-English explanations unavailable right now)" : " · Explanations written by AI"}</Source>
+      {turn.noEngine && (
+        <button type="button" onClick={openSettings} className="tap w-fit text-[12px] font-medium text-olive-ink hover:underline">
+          Set up AI in Settings for plain-English explanations →
+        </button>
+      )}
+      <Source>
+        Errors · LanguageTool{turn.matches.some((m) => m.rule.startsWith("LOCAL_")) ? " + an on-device their/they're check" : ""}
+        {turn.noEngine ? "" : turn.explainFailed ? " (plain-English explanations unavailable right now)" : ` · Explanations written by AI${turn.via ? ` · ${turn.via}` : ""}`}
+      </Source>
     </div>
   );
 }

@@ -16,17 +16,26 @@ A study app for product-design interview prep and everyday English — installab
 
 ## How content works
 
-Facts are fixed, teaching is fresh. Definitions come from dictionaries (with a saved snapshot), rules and answer keys are curated, and the AI layer (Gemini, server-side only) adds examples and feedback. Teaching that doesn't need to be live is pre-generated into `lib/baked-ai.json`, so most screens load instantly; every AI panel has a fallback when the model is slow or unavailable.
+Facts are fixed, teaching is fresh. Definitions come from dictionaries (with a saved snapshot), rules and answer keys are curated, and an AI layer adds examples and feedback. Teaching that doesn't need to be live is pre-generated into `lib/baked-ai.json` and served from `/api/baked`, so most screens load instantly for everyone; every AI panel has a fallback when no model is available.
+
+## Bring your own AI
+
+There is no shared key. In **Settings**, each learner picks an engine:
+
+- **Your Gemini key**: a free key from Google AI Studio, stored only in that browser and sent straight to Google. The server never sees it.
+- **Chrome built-in AI**: Gemini Nano through Chrome's Prompt API, on the device.
+- **Model in your browser**: Qwen2.5 1.5B run with WebLLM and WebGPU, downloaded once (about 1 GB).
+
+All three use the same prompts, schemas and validators (`lib/ai-tasks.ts`). If one engine fails, any other engine that's set up is tried. Settings also has **What to study**: Design, English or both.
 
 ## Running locally
 
 ```bash
 npm install
-echo "GEMINI_API_KEY=your-key" > .env.local
 npm run dev
 ```
 
-Open http://localhost:3000. The app works without a key — AI panels show their fallbacks.
+Open http://localhost:3000 and add an engine in Settings. `GEMINI_API_KEY` in `.env.local` is only used by `npm run bake`.
 
 | Script | What it does |
 | --- | --- |
@@ -38,6 +47,6 @@ Open http://localhost:3000. The app works without a key — AI panels show their
 
 ## Deploying
 
-Deploy on Vercel and set **`GEMINI_API_KEY`** as an environment variable. The key is only ever read on the server (`app/api/llm`). Optional: `GEMINI_MODELS_FAST` / `GEMINI_MODELS_QUALITY` (comma-separated model lists) to override the fallback chains.
+Deploy on Vercel. No environment variables are needed: the server makes no model calls.
 
-Built with Next.js 16, React 19, Tailwind CSS 4, ts-fsrs, compromise, LanguageTool, Free Dictionary API, Wiktionary and Datamuse.
+Built with Next.js 16, React 19, Tailwind CSS 4, WebLLM, ts-fsrs, compromise, LanguageTool, Free Dictionary API, Wiktionary and Datamuse.

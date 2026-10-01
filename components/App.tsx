@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { onOpenSettings } from "@/lib/ai-settings";
 import { DECK, DESIGN_CATEGORIES } from "@/lib/design-data";
 import { stats as deckStats } from "@/lib/fsrs";
 import { level, XP } from "@/lib/gamify";
@@ -10,6 +11,7 @@ import { StoreProvider, useStore, type EnglishCat, type UI } from "./store";
 import { Chip, Icon, IconBtn, Label, Segmented, ToastProvider } from "./ui";
 import DesignView from "./design/DesignView";
 import EnglishView from "./english/EnglishView";
+import Settings from "./Settings";
 
 // ------------------------------------------------------------------ navigation model
 const DESIGN_MODES = [
@@ -123,6 +125,10 @@ function Shell() {
   const { ui, setUI } = useStore();
   const online = useOnline();
   const theme = useTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => onOpenSettings(() => setSettingsOpen(true)), []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const both = (ui.sections ?? "both") === "both";
   const isDesign = ui.subject === "design";
   const engCat = ENGLISH_CATS.find((c) => c.id === ui.englishCat)!;
 
@@ -142,10 +148,12 @@ function Shell() {
       {/* ---------------- desktop rail ---------------- */}
       <aside className="sticky top-0 hidden h-dvh flex-col gap-[22px] overflow-y-auto border-r border-rule px-6 py-8 lg:flex">
         <Wordmark />
-        <div className="flex flex-col gap-2.5">
-          <Label>Subject</Label>
-          <Segmented label="Subject" tone="ink" size="sm" value={ui.subject} onChange={(s) => setUI({ subject: s })} options={[{ id: "design", label: "Design" }, { id: "english", label: "English" }]} />
-        </div>
+        {both && (
+          <div className="flex flex-col gap-2.5">
+            <Label>Subject</Label>
+            <Segmented label="Subject" tone="ink" size="sm" value={ui.subject} onChange={(s) => setUI({ subject: s })} options={[{ id: "design", label: "Design" }, { id: "english", label: "English" }]} />
+          </div>
+        )}
         {modes && (
           <div className="flex flex-col gap-2.5">
             <Label>Mode</Label>
@@ -190,6 +198,9 @@ function Shell() {
           <IconBtn label={theme.dark ? "Switch to light mode" : "Switch to dark mode"} onClick={theme.toggle}>
             {theme.dark ? <Icon.moon size={17} /> : <Icon.sun size={17} />}
           </IconBtn>
+          <IconBtn label="Settings" onClick={() => setSettingsOpen(true)}>
+            <Icon.gear size={17} />
+          </IconBtn>
           <ResetButton />
         </div>
       </aside>
@@ -199,7 +210,7 @@ function Shell() {
         <header className="sticky top-0 z-30 flex flex-col gap-3 border-b border-rule bg-paper/90 px-5 pt-[max(14px,env(safe-area-inset-top))] pb-3 backdrop-blur-xl lg:hidden">
           <div className="flex items-center justify-between gap-2.5">
             <Wordmark small />
-            <div className="flex items-center overflow-hidden rounded-full border border-line" role="tablist" aria-label="Subject">
+            {both && <div className="flex items-center overflow-hidden rounded-full border border-line" role="tablist" aria-label="Subject">
               {(["design", "english"] as const).map((s) => (
                 <button
                   key={s}
@@ -212,10 +223,15 @@ function Shell() {
                   {s}
                 </button>
               ))}
+            </div>}
+            <div className="flex items-center gap-1.5">
+              <IconBtn label={theme.dark ? "Switch to light mode" : "Switch to dark mode"} onClick={theme.toggle}>
+                {theme.dark ? <Icon.moon size={17} /> : <Icon.sun size={17} />}
+              </IconBtn>
+              <IconBtn label="Settings" onClick={() => setSettingsOpen(true)}>
+                <Icon.gear size={17} />
+              </IconBtn>
             </div>
-            <IconBtn label={theme.dark ? "Switch to light mode" : "Switch to dark mode"} onClick={theme.toggle}>
-              {theme.dark ? <Icon.moon size={17} /> : <Icon.sun size={17} />}
-            </IconBtn>
           </div>
           <div className="no-bar -mx-5 flex gap-[7px] overflow-x-auto px-5" role="tablist" aria-label="Categories">
             {categories.map((c) => (
@@ -249,6 +265,7 @@ function Shell() {
           </div>
         </footer>
       </div>
+      {settingsOpen && <Settings onClose={closeSettings} />}
     </div>
   );
 }
